@@ -1,0 +1,382 @@
+---
+title: "NLP exam"
+author: "Maris Sala"
+date: "1/1/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Read in the data, set the working directory, libraries
+```{r}
+print("hello")
+
+library(ggplot2)
+library(plyr)
+pacman::p_load(dplyr)
+
+setwd("~/Aarhus University/NLP/NLP exam")
+
+dat = read.csv("fb_data_R.csv", sep = "\t", encoding="UTF-8", stringsAsFactors=FALSE)
+# Remove empty data
+data = dat[ which( complete.cases(dat)) , ]
+# Format the timestamp
+data$Timestamp <- as.Date(data$Timestamp, format='%d/%m/%y')
+# Add a column with Popularity
+data$Popularity = data$Likes+data$Shares+data$Comments
+data$Terrible = as.factor(data$Terrible)
+```
+
+```{r}
+#Mean popularity
+mean(data$Popularity)
+# Median popularity
+median(data$Popularity)
+# Average likes
+mean(data$Likes)
+median(data$Likes)
+# Average shares
+mean(data$Shares)
+median(data$Shares)
+# Average comments
+mean(data$Comments)
+median(data$Comments)
+```
+
+
+PART 1A: Timeseries analysis
+Plot posts with popularity.
+x-axis is time, y-axis is popularity
+Popularity = add together likes, shares, comments
+Time = date
+
+```{r echo = T}
+# Timeseries plot
+ggplot(data, aes(x=Timestamp, y=Likes)) +
+  geom_point() +
+  geom_smooth(method=lm)
+
+# Popularity plot
+g = ggplot(data, aes(x=Timestamp, y=Popularity)) +
+  geom_point() +
+  geom_smooth(method=lm, span = 0.3) +
+  labs(title = "Popularity of post in time. Nov - Jan 2019") +
+  theme_minimal()
+
+data2 = data
+
+# Make a popularity post based on radicality
+b = ggplot() + 
+  geom_point(subset(data2, Terrible == 1), mapping = aes(x = Timestamp, y = Popularity), color = "red") +
+  geom_point(subset(data, Terrible == 0), mapping = aes(x = Timestamp, y = Popularity), color = "blue") +
+  geom_smooth(subset(data2, Terrible == 1), mapping = aes(x = Timestamp, y = Popularity), color = "red", method=lm) +
+  geom_smooth(subset(data, Terrible == 0), mapping = aes(x = Timestamp, y = Popularity), color = "blue", method=lm) +
+  labs(title = "Popularity of radical (red) and non-radical (blue) posts over time. Nov 2019 - Jan 2020") +
+  theme_minimal()
+
+b
+
+pacman::p_load(gridExtra)
+
+grid.arrange(g,b)
+
+```
+
+PART 1B: Timeseries with Terrible
+Same but y axis shows whether terrible is marked 1 or 0
+
+```{r}
+n_t = length(which(data$Terrible == 0))
+t = length(which(data$Terrible == 1))
+
+ggplot(data, aes(y=Popularity, x=Terrible)) +
+  geom_violin()  +
+  labs(title = "Popularity differences between terrible and non-terrible content") +
+  theme_minimal()
+
+# Find means of the 2 groups
+data$Terrible = as.numeric(as.character(data$Terrible))
+# Mean of terrible posts
+mean(data[data$Terrible>0.1,"Popularity"])
+# Mean of non-terrible posts
+mean(data[data$Terrible<0.1,"Popularity"])
+
+# Median of terrible posts
+median(data[data$Terrible>0.1,"Popularity"])
+# Median of non-terrible posts
+median(data[data$Terrible<0.1,"Popularity"])
+
+# Mean of terrible posts
+median(data[data$Terrible>0.1,"Likes"])
+# Mean of non-terrible posts
+median(data[data$Terrible<0.1,"Likes"])
+
+# Mean of terrible posts
+median(data[data$Terrible>0.1,"Shares"])
+# Mean of non-terrible posts
+median(data[data$Terrible<0.1,"Shares"])
+
+# Mean of terrible posts
+median(data[data$Terrible>0.1,"Comments"])
+# Mean of non-terrible posts
+median(data[data$Terrible<0.1,"Comments"])
+```
+PART 1C: Calculations: time between 2 radical posts and average popularity of posts
+```{r}
+# Make a subset first
+radical = subset(data, select = c("Timestamp", "Terrible", "Popularity"))
+
+# For the 1st calculations, I'll just take the Terrible == 1 to calculate time differences
+rad_1 = subset(radical, Terrible==1)
+
+# Calculated differences of days and popularity of posts
+rad_2 = tail(rad_1, -1) - head(rad_1, -1)
+
+# Average time difference
+mean(rad_2$Timestamp)
+
+# Average popularity change per post
+mean(rad_2$Popularity)
+
+# Average popularity per post
+mean(rad_1$Popularity)
+
+```
+
+
+Noun frequency based on radicality plot
+```{r}
+
+rnouns = read.csv("estnltk/tutorials/nlp_pipeline/radical_nouns.txt", header = F, stringsAsFactors = F)
+
+rn_freq = rnouns %>% group_by(V1) %>% count(V1)
+
+# Create a new dataframe with the frequencies
+#n_freq = count(nouns, 'V1')
+
+# Choose frequencies
+rnfreq2 = subset(rn_freq, rn_freq$n > 3)
+
+rnfreq3 <- rnfreq2 %>% arrange(desc(n))
+
+rnfreq3$n = as.factor(rnfreq3$n)
+
+datax = as.data.frame(rnfreq3$V1)
+names(datax)[1] <- "Word"
+datax$Count = rnfreq3$n
+datax$Count = as.numeric(as.character(datax$Count))
+#datax$Count = as.character(datax$Count)
+rdatax = datax
+
+# Frequency plot
+ggplot(datax, aes(x = Count, y = reorder(Word, Count))) +
+  geom_point() +
+  labs(title = "Frequency of nouns (35 most popular nouns)", y = "Words") +
+  theme_minimal()
+
+nrnouns = read.csv("estnltk/tutorials/nlp_pipeline/nonradical_nouns.txt", header = F, stringsAsFactors = F)
+
+nrn_freq = nrnouns %>% group_by(V1) %>% count(V1)
+
+# Create a new dataframe with the frequencies
+#n_freq = count(nouns, 'V1')
+
+# Choose frequencies
+nrnfreq2 = subset(nrn_freq, nrn_freq$n > 10)
+
+nrnfreq3 <- nrnfreq2 %>% arrange(desc(n))
+
+nrnfreq3$n = as.factor(nrnfreq3$n)
+
+datax = as.data.frame(nrnfreq3$V1)
+names(datax)[1] <- "Word"
+datax$Count = nrnfreq3$n
+datax$Count = as.numeric(as.character(datax$Count))
+#datax$Count = as.character(datax$Count)
+ndatax = datax
+
+# Frequency plot
+ggplot(datax, aes(x = Count, y = reorder(Word, Count))) +
+  geom_point() +
+  labs(title = "Frequency of nouns (35 most popular nouns)", y = "Words") +
+  theme_minimal()
+
+ggplot() + 
+  geom_point(data = rdatax, aes(x = Count/229, y = Word), color = "red") +
+  geom_point(data = ndatax, aes(x = Count/633, y = Word), color = "blue") +
+  labs(title = "Word usage in radical and non-radical posts", x = "Adjusted count") +
+  theme_minimal()
+
+length(nrn_freq$V1)
+
+```
+
+
+PART 2: Post-by-post analysis
+Here we want the text from the posts
+1) General word frequency plot
+2) Words and time plot
+3) Relate words to popularity?
+4) Or media/emoticons
+
+```{r}
+nouns = read.csv("estnltk/tutorials/nlp_pipeline/all_nouns.txt", header = F, stringsAsFactors = F)
+
+library(plyr)
+pacman::p_load(tidyverse)
+
+n_freq = nouns %>% group_by(V1) %>% count(V1)
+
+# Create a new dataframe with the frequencies
+#n_freq = count(nouns, 'V1')
+
+# Choose frequencies
+freq2 = subset(n_freq, n_freq$n > 10)
+
+freq3 <- freq2 %>% arrange(desc(n))
+
+freq3$n = as.factor(freq3$n)
+
+datax = as.data.frame(freq3$V1)
+names(datax)[1] <- "Word"
+datax$Count = freq3$n
+datax$Count = as.numeric(as.character(datax$Count))
+#datax$Count = as.character(datax$Count)
+
+
+# Frequency plot
+ggplot(datax, aes(x = Count, y = reorder(Word, Count))) +
+  geom_point() +
+  labs(title = "Frequency of nouns (35 most popular nouns)", y = "Words") +
+  theme_minimal()
+```
+
+PART 3: Radical 
+
+```{r}
+dat = read.csv("cumulative_sum_R.csv", sep = "\t", encoding="UTF-8", stringsAsFactors=FALSE)
+# Remove empty data
+dat2 = dat[ which( complete.cases(dat)) , ]
+# Format the timestamp
+dat2$Timestamp <- as.Date(dat2$Timestamp, format='%d/%m/%y')
+
+sumdata = subset(dat2, Terrible == 1)
+```
+
+
+Fun plots
+```{r}
+pacman::p_load(caret,e1071)
+data$Sad.content = as.factor(data$Sad.content)
+data$Sad.reaction = as.factor(data$Sad.reaction)
+ggplot(data, aes(Sad.content, Sad.reaction)) +
+  geom_count()
+
+confusionMatrix(data$Sad.reaction, reference = data$Sad.content)
+```
+
+# Make some models
+```{r}
+pacman::p_load(lmer,lme4)
+
+OLSexamp <- lm(Popularity ~ Timestamp, data = data)
+summary(OLSexamp)
+
+OLSexamp <- lm(Popularity ~ Timestamp + Terrible, data = data)
+summary(OLSexamp)
+
+OLSexamp <- lm(Shares ~ Terrible + Sad.reaction, data = data)
+summary(OLSexamp)
+
+data$Sad.content = as.numeric(as.character(data$Sad.content))
+data$Sad.reaction = as.numeric(as.character(data$Sad.reaction))
+
+OLSexamp <- lm(Sad.reaction ~ Sad.content, data = data)
+summary(OLSexamp)
+
+OLSexamp <- lm(Popularity ~ Cumulative.sum, data = sumdata)
+summary(OLSexamp)
+
+```
+
+Popularity of post and popular words
+```{r}
+popular = subset(data, Popularity > mean(data$Popularity))
+unpopular = subset(data, Popularity < (mean(data$Popularity)-70))
+
+write.csv(popular, file = "popular_posts.csv", fileEncoding = "UTF-8")
+write.csv(unpopular, file = "unpopular_posts.csv", fileEncoding = "UTF-8")
+```
+
+Read the POS files back in and find what types we have
+```{r}
+dat = read.csv("estnltk/tutorials/nlp_pipeline/morph_pos_popular.txt", header = F, stringsAsFactors = F)
+
+# Remove punctuation and spaces
+dat$V1 = gsub('[[:punct:]]',"",dat$V1)
+dat$V1 = gsub('\\s', "", dat$V1)
+
+# Summarise the data
+pos_data = dat %>%
+  group_by(V1) %>%
+  summarize(n())
+
+## Same for unpopular
+dat2 = read.csv("estnltk/tutorials/nlp_pipeline/morph_pos_unpopular.txt", header = F, stringsAsFactors = F)
+
+# Remove punctuation and spaces
+dat2$V1 = gsub('[[:punct:]]',"",dat2$V1)
+dat2$V1 = gsub('\\s', "", dat2$V1)
+
+# Summarise the data
+un_pos_data = dat2 %>%
+  group_by(V1) %>%
+  summarize(n())
+
+colnames(pos_data) <- c("POS_tag", "Count")
+colnames(un_pos_data) <- c("POS_tag", "Count")
+
+length(dat$V1)
+length(dat2$V1)
+
+# Plot these on the same plot
+ggplot() +
+  geom_point(data = pos_data, aes(x = POS_tag, y = Count/2791), color = "deeppink1", size = 5, shape = 18) +
+  geom_line(data = pos_data, aes(x = POS_tag, y = Count/2791), color = "deeppink1", group = 1) +
+  geom_point(data = un_pos_data, aes(x = POS_tag, y = Count/2040), color = "darkblue", size = 5, shape = 17) +
+  geom_line(data = un_pos_data, aes(x = POS_tag, y = Count/2040), color = "darkblue", group = 1) +
+  labs(title = "Word type counts between popular (diamond) and unpopular (triangle) posts", x = "POS tag", y = "Adjusted count") +
+  theme_minimal()
+```
+
+Analyse unique words
+```{r}
+pop_unique = read.csv("estnltk/tutorials/nlp_pipeline/unique_popular.txt", header = F, stringsAsFactors = F)
+### SAME FOR UNPOPULAR NOUNS
+unpop_unique = read.csv("estnltk/tutorials/nlp_pipeline/unique_unpopular.txt", header = F, stringsAsFactors = F)
+
+# Sum them up
+un_un = unpop_unique %>%
+  group_by(V1) %>%
+  summarize(n())
+
+pop_un = pop_unique %>%
+  group_by(V1) %>%
+  summarize(n())
+
+colnames(un_un) <- c("Word", "Count")
+colnames(pop_un) <- c("Word", "Count")
+# Frequency plot
+ggplot(un_un, aes(x = Count, y = reorder(Word, Count))) +
+  geom_point() #+
+  labs(title = "Frequency of nouns (35 most popular nouns)", y = "Words") +
+  theme_minimal()
+  
+ggplot(pop_un, aes(x = Count, y = reorder(Word, Count))) +
+  geom_point() #+
+  labs(title = "Frequency of nouns (35 most popular nouns)", y = "Words") +
+  theme_minimal()
+```
+
